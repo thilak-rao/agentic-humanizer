@@ -1,10 +1,13 @@
 # Agentic Humanizer for Claude Desktop
 
 This is the Claude Desktop build of Agentic Humanizer. It rewrites
-AI-generated text with a full 5-pass workflow, saved preferences, and
-optional stylometric voice matching. Unlike the multi-agent build, this
+AI-generated text with a full 5-pass workflow and optional stylometric voice
+matching from a pasted writing sample. Unlike the multi-agent build, this
 version has no harness routing: it runs a built-in interview using Claude
-Desktop's `ask_user_input_v0` prompt, one question at a time.
+Desktop's `ask_user_input_v0` prompt, one question at a time. Because Claude
+Desktop skills run in a sandbox, this bundle does not persist preferences,
+voice samples, or fingerprints between chats; every run captures what it
+needs in-session.
 
 **Core functionality does not require Slop or Not.** Without Slop or Not, the
 skill still interviews for preferences, can match a writing sample, runs all
@@ -42,21 +45,20 @@ one folder, `agentic-humanizer/`, with `SKILL.md`, this `README.md`, the
 [paste your AI-generated text here]
 ```
 
-On first use Claude Desktop asks four short questions (dialect, reading
-level, tone, length), then optionally one about matching a writing sample.
-Answers can be saved as defaults so later runs skip the interview.
+Claude Desktop asks four short questions (dialect, reading level, tone,
+length), then optionally one about matching a writing sample. Answers apply
+to the current run; the sandbox does not persist them between chats.
 
-Use a voice sample for one call:
-
-```text
-/agentic-humanizer voice=/path/to/sample.txt [paste]
-```
-
-Use saved preferences without another interview:
+Skip the interview for one call by passing every preference inline, or pass
+`skip-interview` to use defaults:
 
 ```text
 /agentic-humanizer skip-interview [paste]
 ```
+
+To match a writing sample for this run, answer **Yes** to the voice question
+and paste 200+ words when prompted. The pasted sample is held in memory for
+that run only; nothing is written to disk.
 
 ## Inline overrides
 
@@ -72,20 +74,12 @@ Use saved preferences without another interview:
 | `length=±10`, `length=exp`, or `length=trim` | Keep length close, allow expansion, or allow trimming. |
 | `threshold=N` | Override the Slop or Not Pro AI-score target. |
 | `max=N` | Override the Slop or Not Pro measured-iteration cap. |
-| `voice=/path/to/file.txt` | Use a writing sample for this run. |
 | `voice=off` or `voice-skip` | Skip voice matching. |
-| `skip-interview` | Use saved preferences or defaults. |
+| `skip-interview` | Use defaults (American, High school, Professional, ±10%). |
 
-## Local files
+## Sandbox notes
 
-Agentic Humanizer stores preferences and optional voice data under
-`~/.agentic-humanizer/`, which can contain `profile.json`, `voice.txt`, and
-`voice-fingerprint.json`. Manage them with:
-
-```text
-/agentic-humanizer show profile
-/agentic-humanizer reset
-/agentic-humanizer show voice
-/agentic-humanizer reset voice
-/agentic-humanizer set voice=/path/to/file.txt
-```
+Claude Desktop runs skills in a sandbox, so this bundle intentionally omits
+the saved-profile and on-disk voice features of the multi-agent build. There
+is no `~/.agentic-humanizer/` directory and no `voice=/path/to/file.txt`
+flag: voice samples are captured by pasting them into the chat each run.

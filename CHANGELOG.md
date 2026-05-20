@@ -13,9 +13,15 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   at a time, and uses a Slop or Not MCP connector when one is attached
   (otherwise the unscored core workflow). It never invokes a local Slop CLI:
   the Desktop sandbox cannot reach the user's machine, so MCP is the only
-  Pro backend. `make -C claude-skills` builds a
-  shippable `agentic-humanizer-desktop.zip` a non-technical user can upload
-  via Settings, Capabilities, Skills.
+  Pro backend. The bundle is sandbox-aware: it does not read or write
+  `~/.agentic-humanizer/`, captures voice samples by paste rather than file
+  path, and keeps any approved fingerprint in memory for one run only.
+  `ask_user_input_v0` is declared in `allowed-tools` and called with the
+  proper `questions:` array shape, with reading-level bands collapsed to
+  four contiguous options so each question stays within the option cap.
+  `make -C claude-skills` builds a shippable
+  `agentic-humanizer-desktop.zip` a non-technical user can upload via
+  Settings, Capabilities, Skills.
 - New `slop-check` skill: a self-contained, one-shot router for Slop or Not
   Pro's on-device tools. Detects AI text or images, scores readability
   (Flesch-Kincaid), cleans AI artifacts, returns raw OmniAID scores when

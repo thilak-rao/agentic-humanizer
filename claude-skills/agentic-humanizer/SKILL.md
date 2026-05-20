@@ -1,18 +1,12 @@
 ---
 name: agentic-humanizer
 version: 0.1.0
-description: |
-  Humanizes AI-generated text with a 5-pass rewrite workflow, optional saved
-  preferences, and optional stylometric voice matching from a writing sample.
-  Works without Slop or Not. When Slop or Not Pro is reachable, adds
-  on-device AI detector scoring, Flesch-Kincaid readability checks, Text
-  Cleanup, and cleanup stats.
-  Use when the user invokes /agentic-humanizer or asks to humanize text.
+description: Humanizes AI text with a five-pass rewrite workflow, optional voice matching, and Slop or Not Pro scoring when available. Use for /agentic-humanizer.
 license: MIT
 compatibility: claude-desktop
 allowed-tools:
   - Read
-  - Bash
+  - ask_user_input_v0
 ---
 
 # Agentic Humanizer
@@ -26,17 +20,17 @@ Pro adds measured on-device AI detector checks.
 
 **Slash command:** `/agentic-humanizer [paste text]`
 
-**Inline overrides:** `/agentic-humanizer dialect=us|uk grade=N tone=casual|professional|academic length=±10|exp|trim threshold=N max=N voice=/path/to/file.txt|off voice-skip skip-interview [paste]`
+**Inline overrides:** `/agentic-humanizer dialect=us|uk grade=N tone=casual|professional|academic length=±10|exp|trim threshold=N max=N voice=off voice-skip skip-interview [paste]`
 
 ## What this skill does
 
 1. Runs the built-in Claude Desktop interview (no harness detection).
-2. Handles profile and voice management commands before any rewrite.
-3. Resolves rewrite preferences from inline overrides, saved profile, or the
+2. Handles inline overrides and unsupported profile commands before any rewrite.
+3. Resolves rewrite preferences from inline overrides, defaults, or the
    interview.
-4. Optionally resolves a writing sample and extracts a cached stylometric
+4. Optionally captures a per-run writing sample and extracts a stylometric
    fingerprint. Voice matching does not require Slop or Not.
-5. Probes whether Slop or Not Pro is reachable via MCP or CLI.
+5. Probes whether Slop or Not Pro is reachable via MCP.
 6. Runs the 5-pass humanization workflow:
    - Core mode logs unscored iterations.
    - Slop or Not Pro runs Text Cleanup, detection, and readability checks.
@@ -52,49 +46,62 @@ question list and the answer mapping are defined here.
 ### The interview: four or five sequential `ask_user_input_v0` calls
 
 Issue the four required questions below in sequence; do not bundle. Add the
-fifth voice question only when no inline or saved `voice_path` has resolved,
-`~/.agentic-humanizer/voice.txt` is absent, and the saved profile does not
-contain `"voice_skip": true`.
+fifth voice question only when no inline `voice=off` or `voice-skip` override
+is present.
 
 ```text
 ask_user_input_v0({
-  title: "Dialect",
-  message: "Which English variant should the rewrite target?",
-  options: ["American English", "British English", "Other"]
-})
-
-ask_user_input_v0({
-  title: "Reading level",
-  message: "What reading level should the output target?",
-  options: [
-    "Elementary (Grade 3–5)",
-    "Middle school (Grade 6–8)",
-    "High school (Grade 9–11)",
-    "College (Grade 12–15)",
-    "Graduate or professional (Grade 16+)"
+  questions: [
+    {
+      question: "Which English variant should the rewrite target?",
+      options: ["American English", "British English", "Other"]
+    }
   ]
 })
 
 ask_user_input_v0({
-  title: "Tone",
-  message: "What tone should the output use?",
-  options: ["Casual", "Professional", "Academic"]
-})
-
-ask_user_input_v0({
-  title: "Length",
-  message: "Length policy for the rewrite?",
-  options: [
-    "Keep within ±10% of original",
-    "Allow expansion",
-    "Allow trimming"
+  questions: [
+    {
+      question: "What reading level should the output target?",
+      options: [
+        "Elementary (Grade 3-5)",
+        "Middle school (Grade 6-8)",
+        "High school (Grade 9-11)",
+        "College or professional (Grade 12+)"
+      ]
+    }
   ]
 })
 
 ask_user_input_v0({
-  title: "Voice",
-  message: "Mimic a writing sample of yours?",
-  options: ["Yes", "No", "Never ask again"]
+  questions: [
+    {
+      question: "What tone should the output use?",
+      options: ["Casual", "Professional", "Academic"]
+    }
+  ]
+})
+
+ask_user_input_v0({
+  questions: [
+    {
+      question: "Length policy for the rewrite?",
+      options: [
+        "Keep within ±10% of original",
+        "Allow expansion",
+        "Allow trimming"
+      ]
+    }
+  ]
+})
+
+ask_user_input_v0({
+  questions: [
+    {
+      question: "Mimic a writing sample of yours?",
+      options: ["Yes", "No"]
+    }
+  ]
 })
 ```
 
@@ -106,94 +113,52 @@ Map the chosen labels to internal variables:
 
 - Q1 -> `dialect`: `American English` -> `us`, `British English` -> `uk`,
   `Other` -> prompt for the dialect string in the next user turn.
-- Q2 -> `target_grade`: 4, 7, 10, 13, 17 in order.
+- Q2 -> `target_grade`: `Elementary (Grade 3-5)` -> `4`,
+  `Middle school (Grade 6-8)` -> `7`, `High school (Grade 9-11)` -> `10`,
+  `College or professional (Grade 12+)` -> `13`.
 - Q3 -> `tone`: lowercase the label.
 - Q4 -> `length_policy`: `Keep within ±10% of original` -> `±10`,
   `Allow expansion` -> `exp`, `Allow trimming` -> `trim`.
 - Q5 -> voice choice: `Yes` starts Step 4 sample capture, `No` skips
-  voice matching for this call, `Never ask again` persists `voice_skip`.
+  voice matching for this call.
 
 When Q5 is `Yes`, say exactly: *"Paste 200+ words as your next message."*
 Capture the next user turn as the voice sample and return to Step 4 for
-validation, writing, and fingerprint extraction.
+validation and fingerprint extraction.
 
 ## Step 2: Profile management commands
 
-The user can manage their saved profile with these subcommands:
+Claude Desktop skill execution is sandboxed, so this Desktop bundle does not
+support local saved-profile commands. If the user asks to show, reset, or set
+a profile, explain that saved preferences are unavailable in Claude Desktop
+and offer inline overrides for the current run.
 
-| Command | Action |
-|---|---|
-| `/agentic-humanizer show profile` | Print `~/.agentic-humanizer/profile.json` (or "no profile saved"). |
-| `/agentic-humanizer reset` | `rm ~/.agentic-humanizer/profile.json` and confirm. |
-| `/agentic-humanizer set dialect=uk grade=10 tone=casual length=±10` | Write a profile from inline params without running the interview. Any subset of keys is allowed; missing keys keep their current value or use the default if no profile exists. |
-| `/agentic-humanizer show voice` | Print `~/.agentic-humanizer/voice-fingerprint.json` if present, plus the sample path; otherwise say no voice is saved. |
-| `/agentic-humanizer reset voice` | Remove `~/.agentic-humanizer/voice.txt` and `~/.agentic-humanizer/voice-fingerprint.json`, then clear voice fields from the profile without deleting the rewrite preferences. |
-| `/agentic-humanizer set voice=/path/to/file.txt` | Save the profile's `voice_path`, clear `voice_skip`, and use that path on future runs. Do not extract the fingerprint until the next rewrite call. |
-
-When you see one of these subcommands, execute it and stop. Do not probe Slop
-or run the loop.
+When you see one of these unsupported profile commands, respond with that
+limitation and stop. Do not probe Slop or run the loop.
 
 ## Step 3: Resolve rewrite preferences
 
-**Profile resolution order:**
+**Preference resolution order:**
 
-1. **Inline overrides** for all four rewrite parameters -> use them; do not
-   read the profile for dialect, grade, tone, or length.
-2. **`skip-interview` flag** -> use the saved profile if present, otherwise
-   fall back to defaults (American, High school, Professional, ±10%).
-3. **Saved profile at `~/.agentic-humanizer/profile.json`** -> use it
-   silently and skip the interview. Never re-prompt a user who already has a
-   profile unless they ask.
-4. **No profile, no overrides** -> run the interview as below.
+1. **Inline overrides** for all four rewrite parameters -> use them.
+2. **`skip-interview` flag** -> use defaults (American, High school,
+   Professional, ±10%).
+3. **No complete inline overrides** -> run the interview below.
 
-Read the saved profile with:
+Claude Desktop cannot rely on a local `~/.agentic-humanizer/profile.json`.
+Do not read or write a saved profile in this bundle.
 
-```bash
-PROFILE=~/.agentic-humanizer/profile.json
-[ -f "$PROFILE" ] && cat "$PROFILE"
-```
-
-If the file is missing, malformed JSON, or missing required rewrite keys,
-treat it as absent and run the interview. Version 1 profiles load normally.
-Missing voice fields use their defaults in Step 4. If a parseable profile has
-`voice_skip` but is missing rewrite keys, ignore it for the rewrite interview
-but still honor `voice_skip` in Step 4.
-
-**Run the interview** using the protocol in Step 1. The interview may batch the
-conditional voice question when it is eligible; Step 4 handles that answer.
-Capture these rewrite settings here:
+**Run the interview** using the protocol in Step 1. Capture these rewrite
+settings here:
 
 - `dialect` in {`us`, `uk`, `other:<string>`}
-- `target_grade` in {4, 7, 10, 13, 17}
+- `target_grade` in {4, 7, 10, 13} from the interview; any integer N from
+  inline `grade=N`
 - `tone` in {`casual`, `professional`, `academic`}
 - `length_policy` in {`±10`, `exp`, `trim`}
 
-After the rewrite answers, ask **one final yes/no question** (use
-`ask_user_input_v0`):
-
-> *"Save these as your default so I don't ask again next time? You can reset anytime with `/agentic-humanizer reset`."*
-
-If yes:
-
-```bash
-mkdir -p ~/.agentic-humanizer
-cat > ~/.agentic-humanizer/profile.json <<EOF
-{
-  "dialect": "<us|uk|other:...>",
-  "target_grade": <4|7|10|13|17>,
-  "tone": "<casual|professional|academic>",
-  "length_policy": "<±10|exp|trim>",
-  "voice_path": "~/.agentic-humanizer/voice.txt",
-  "voice_skip": false,
-  "voice_fingerprint_hash": null,
-  "saved_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "version": 2
-}
-EOF
-```
-
-Then continue to Step 4. Inline overrides on a future call always win over a
-saved profile for that one call only; they do not overwrite the file.
+After the rewrite answers, continue to Step 4. Do not ask to save Desktop
+defaults, because local filesystem persistence is not reliable across chats.
 
 ## Step 4: Resolve voice sample
 
@@ -203,99 +168,57 @@ Read `references/voice-fingerprint.md` before running this step. Set
 **Voice sample resolution order:**
 
 1. Inline `voice=off` or `voice-skip` -> skip voice matching for this call.
-2. Inline `voice=/path/to/file.txt` -> use that sample for this call only.
-   If the path does not exist or is not readable, warn the user once, then
-   fall through to rules 3 onward as if the inline override were absent.
-3. Saved `profile.json` has `voice_path` and that file exists -> use it.
-4. Default `~/.agentic-humanizer/voice.txt` exists -> use it.
-5. Saved `profile.json` has `"voice_skip": true` -> skip silently.
-6. Otherwise -> use the conditional Q5 answer already captured by the
+2. Inline `voice=/path/to/file.txt` -> explain that Claude Desktop cannot
+   reliably read arbitrary local paths from the user's Mac. Ask the user to
+   paste 200+ words if they want voice matching for this run.
+3. Otherwise -> use the conditional Q5 answer already captured by the
    interview, or ask it now if the interview did not batch it:
 
    > *"Mimic a writing sample of yours?"*
 
-   Options: `Yes`, `No`, `Never ask again`.
+   Options: `Yes`, `No`.
 
-If Q5 is `No`, skip voice matching for this call. If Q5 is `Never ask again`,
-write or update `~/.agentic-humanizer/profile.json` with `"voice_skip": true`
-and `"version": 2`, then skip voice matching.
+If Q5 is `No`, skip voice matching for this call.
 
-If Q5 is `Yes`, say exactly:
+If Q5 is `Yes`, or if the user chooses to paste a sample after a
+`voice=/path` warning, say exactly:
 
 > *"Paste 200+ words as your next message."*
 
-Capture the next user turn as the sample. Validate it before writing:
+Capture the next user turn as the sample. Validate it before using it:
 
 - Under 50 words: reject it, say the sample is too short, leave
-  `voice_active=false`, and continue without changing the profile.
+  `voice_active=false`, and continue without changing any profile.
 - 50-199 words: warn that 200+ words works better, then ask whether to
   continue with the shorter sample or paste a longer one.
-- 200+ words: write it to `~/.agentic-humanizer/voice.txt`.
+- 200+ words: use the pasted text in memory for this run. Do not write it to
+  `~/.agentic-humanizer/voice.txt`.
 
 For every accepted sample, use only the first 3000 words for fingerprint
-extraction. Hash the first 50 KB of the sample content:
-
-```bash
-VOICE_SAMPLE="<resolved-sample-path>"
-head -c 51200 "$VOICE_SAMPLE" | shasum -a 256
-```
-
-Prefix the stored value with `sha256:`.
+extraction.
 
 **Fingerprint cache:**
 
-The cache lives at `~/.agentic-humanizer/voice-fingerprint.json`. Validate it
-against every rule in `references/voice-fingerprint.md` Cache invalidation
-(file present, `version: 1`, `sample_hash` match, all required fields
-populated). On a clean cache hit, use it silently and set
-`voice_active=true`. On any invalidation trigger, treat it as a cache miss and
-run extraction.
+Do not use `~/.agentic-humanizer/voice-fingerprint.json` in Claude Desktop.
+Keep any approved fingerprint in memory for this run only.
 
-On cache miss, run the extraction prompt from `references/voice-fingerprint.md`
-against the host LLM. Render the JSON fingerprint and ask:
+Run the extraction prompt from `references/voice-fingerprint.md` against the
+host LLM. Render the JSON fingerprint and ask:
 
 > *"Looks right?"*
 
 Options: `Yes`, `Edit`, `Re-extract`.
 
-- `Yes`: write the approved JSON to
-  `~/.agentic-humanizer/voice-fingerprint.json`, then rewrite
-  `~/.agentic-humanizer/profile.json` so `voice_path` points to the resolved
-  sample, `voice_skip` is `false`, `voice_fingerprint_hash` matches the sample
-  hash, and `version` is `2`. Use the same heredoc pattern as Step 3,
-  replacing only those four fields and preserving everything else:
-
-  ```bash
-  mkdir -p ~/.agentic-humanizer
-  cat > ~/.agentic-humanizer/profile.json <<EOF
-  {
-    "dialect": "<keep current>",
-    "target_grade": <keep current>,
-    "tone": "<keep current>",
-    "length_policy": "<keep current>",
-    "voice_path": "<resolved-sample-path>",
-    "voice_skip": false,
-    "voice_fingerprint_hash": "sha256:<current-sample-hash>",
-    "saved_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-    "version": 2
-  }
-  EOF
-  ```
-
-  Then set `voice_active=true`.
+- `Yes`: set `voice_active=true` with the approved in-memory fingerprint.
 - `Edit`: let the user correct the JSON inline. Validate it against the
   required-field list in `references/voice-fingerprint.md` Required fields
-  before saving. If the edit drops a required field, refuse to save and offer
-  Re-extract.
+  before using it. If the edit drops a required field, refuse to use it and
+  offer Re-extract.
 - `Re-extract`: ask what to change, then re-run extraction with that hint.
 
 Run the Yes/Edit/Re-extract approval gate via `ask_user_input_v0` (Claude
 Desktop has a structured input tool, so the gate does not degrade to
 print-and-continue).
-
-Inline `voice=/path/to/file.txt` does not overwrite the default sample or
-saved profile path. It may refresh the shared fingerprint cache for that
-sample hash.
 
 If extraction fails, if the sample is binary or unreadable, or if no host LLM
 is available for the extraction prompt, set `voice_active=false`, add the
@@ -474,13 +397,13 @@ and add this note:
 If voice matching was active, add this footer note:
 
 ```markdown
-> _Voice matched from <path> (fingerprint cached <date>)._
+> _Voice matched from a pasted sample for this run._
 ```
 
 If voice extraction failed in Step 4, add this footer note instead:
 
 ```markdown
-> _Voice extraction failed; ran without voice match. Re-run with `/agentic-humanizer reset voice` to retry._
+> _Voice extraction failed; ran without voice match. Paste a fresh sample on your next run to retry._
 ```
 
 ## Pointer files
