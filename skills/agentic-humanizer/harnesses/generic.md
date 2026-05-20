@@ -105,10 +105,16 @@ Capture the four answers as variables:
 - `length_policy` ∈ {`±10`, `exp`, `trim`}
 - `voice_choice` ∈ {`yes`, `no`, `never`} when Q5 is present
 
-When Q5 is `y`, say exactly: *"Paste 200+ words as your next message."*
-Capture the next user turn as the voice sample and return to `SKILL.md`
-Step 4 for validation, writing, and fingerprint extraction. When Q5 is
-`never`, persist `voice_skip`.
+When Q5 is `y`:
+
+1. If Q1 was `Other`, first capture the custom dialect string from the
+   user's next turn and finalize `dialect`. Only continue to step 2 after
+   the dialect is resolved.
+2. Say exactly: *"Paste 200+ words as your next message."*
+3. Capture the next user turn as the voice sample and return to
+   `SKILL.md` Step 4 for validation, writing, and fingerprint extraction.
+
+When Q5 is `never`, persist `voice_skip`.
 
 Return to `SKILL.md` § Loop algorithm with these answers.
 

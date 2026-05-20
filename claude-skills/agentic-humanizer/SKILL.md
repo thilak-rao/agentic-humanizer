@@ -123,9 +123,14 @@ Map the chosen labels to internal variables:
 - Q5 -> voice choice: `Yes` starts Step 4 sample capture, `No` skips
   voice matching for this call.
 
-When Q5 is `Yes`, say exactly: *"Paste 200+ words as your next message."*
-Capture the next user turn as the voice sample and return to Step 4 for
-validation and fingerprint extraction.
+When Q5 is `Yes`:
+
+1. If Q1 was `Other`, first capture the custom dialect string from the
+   user's next turn and finalize `dialect`. Only continue to step 2 after
+   the dialect is resolved.
+2. Say exactly: *"Paste 200+ words as your next message."*
+3. Capture the next user turn as the voice sample and return to Step 4
+   for validation and fingerprint extraction.
 
 ## Step 2: Profile management commands
 
