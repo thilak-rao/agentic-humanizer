@@ -7,6 +7,9 @@ compatibility: claude-desktop
 allowed-tools:
   - Read
   - ask_user_input_v0
+  - mcp__SlopOrNot__detect_text
+  - mcp__SlopOrNot__analyze_readability
+  - mcp__SlopOrNot__clean_text
 ---
 
 # Agentic Humanizer

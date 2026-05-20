@@ -128,6 +128,11 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Claude Desktop Agentic Humanizer now allowlists the Slop or Not MCP tools
+  it calls for Pro scoring, readability, and Text Cleanup.
+- The shared voice-fingerprint reference now states that the Claude Desktop
+  bundle keeps pasted voice samples and fingerprints in memory only, with no
+  `~/.agentic-humanizer/` disk cache.
 - Agentic Humanizer's CLI Text Cleanup instructions now pipe the selected
   source or final text into `slop cleanup --json`, so CLI-only Pro runs do
   not receive an empty `cleanedText` result.
